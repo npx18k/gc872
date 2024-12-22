@@ -1,0 +1,50 @@
+name: Ubuntu Setup and SSH Access
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  ubuntu-setup:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Update system and install tmux
+      run: |
+        sudo apt update -y
+        sudo apt install -y tmux
+
+    - name: Install SDKMAN
+      run: |
+        curl -s "https://get.sdkman.io" | bash
+        source "$HOME/.sdkman/bin/sdkman-init.sh"
+
+    - name: Setup SSH and configure root access
+      run: |
+        echo "Setting up SSH for root access"
+        sudo mkdir -p /root/.ssh
+        echo "$SSH_PUBLIC_KEY" | sudo tee /root/.ssh/authorized_keys > /dev/null
+        sudo chmod 600 /root/.ssh/authorized_keys
+        sudo chown root:root /root/.ssh/authorized_keys
+        echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
+        echo "PasswordAuthentication no" | sudo tee -a /etc/ssh/sshd_config
+        sudo systemctl restart sshd
+      env:
+        SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+
+    - name: Open port 22 in iptables
+      run: |
+        sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+        sudo iptables-save | sudo tee /etc/iptables/rules.v4 > /dev/null
+
+    - name: Start reverse SSH tunnel
+      run: |
+        nohup ssh -o StrictHostKeyChecking=no -R 0:localhost:22 serveo.net > serveo.log 2>&1 &
+        sleep 5
+        echo "Serveo.net tunnel setup complete. Logs:" 
+        cat serveo.log
