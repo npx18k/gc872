@@ -1,0 +1,44 @@
+name: launch-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      authcode:
+        description: 'Authentication Code for Chrome Remote Desktop'
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    # Run the main tasks in one script
+    - name: Run Main Workflow
+      shell: pwsh
+      run: |
+        # Disable Firewall
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+        
+        # Install Chrome Remote Desktop Host
+        $tempFile = Join-Path $env:TEMP 'chromeremotedesktophost.msi'
+        Invoke-WebRequest 'https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi' -OutFile $tempFile
+        Start-Process -FilePath $tempFile -Wait
+        Remove-Item $tempFile
+
+        # Authenticate CRD with authcode and pincode from secrets
+        $authcode = '${{ github.event.inputs.authcode }}'
+        $pincode = ${{ secrets.PINCODE }}
+        Write-Host "Authenticating Chrome Remote Desktop..."
+        & "$authcode" -pin=$pincode
+
+        # Start a 6-hour timeout loop
+        $endTime = (Get-Date).AddHours(6)
+        while ((Get-Date) -lt $endTime) {
+          Start-Sleep -Seconds 60
+        }
+
+    # Run download.ps1 script independently
+    # - name: Install Programs
+    #   run: ./download.ps1
